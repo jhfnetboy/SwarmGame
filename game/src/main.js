@@ -97,21 +97,46 @@ function spawnWarship() {
 }
 
 function spawnHomeworld() {
-  const geo = new THREE.SphereGeometry(22, 32, 32);
-  // Stable MeshStandardMaterial - no WebGL shader compilation risk
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x112244,
-    emissive: 0x002299,
-    emissiveIntensity: 0.8,
-    roughness: 0.5,
-    metalness: 0.4
+  const geo = new THREE.SphereGeometry(22, 64, 64);
+  // ShaderMaterial - no precision declarations (Three.js injects them automatically)
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      time:   { value: 0.0 },
+      colorA: { value: new THREE.Color(0x0a1a44) },
+      colorB: { value: new THREE.Color(0x0055ff) }
+    },
+    vertexShader: `
+      uniform float time;
+      varying vec3 vNormal;
+      varying vec3 vPos;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPos = position;
+        float pulse = sin(position.y * 0.4 + time * 1.5) * cos(position.x * 0.4 + time) * 2.2;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * pulse, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 colorA;
+      uniform vec3 colorB;
+      uniform vec3 cameraPosition;
+      varying vec3 vNormal;
+      varying vec3 vPos;
+      void main() {
+        float n = sin(vPos.x*0.4+time) * sin(vPos.y*0.4+time*1.2) * sin(vPos.z*0.4+time*0.8);
+        vec3 color = mix(colorA, colorB, n * 0.5 + 0.5);
+        vec3 viewDir = normalize(cameraPosition - vPos);
+        float rim = 1.0 - max(dot(viewDir, normalize(vNormal)), 0.0);
+        rim = smoothstep(0.5, 1.0, rim);
+        gl_FragColor = vec4(color + vec3(0.0, 0.3, 1.0) * rim * 0.8, 1.0);
+      }
+    `
   });
   homeworldMesh = new THREE.Mesh(geo, mat);
-  // Fixed position dead center in front of the camera
   homeworldMesh.position.set(0, 0, -100);
   scene.add(homeworldMesh);
   homeworldHp = 8000;
-  // Add point light on homeworld
   const light = new THREE.PointLight(0x3366ff, 4, 250);
   homeworldMesh.add(light);
 }
@@ -430,6 +455,9 @@ function updateCombat(dt) {
            if (dist < 40) {
              isHit = true;
              shootDir.copy(epos).sub(_drone).normalize();
+             // Safety: never fire toward camera (positive Z)
+             if (shootDir.z > -0.05) shootDir.z = -0.15;
+             shootDir.normalize();
              lasers.fire(_drone, shootDir, 160, false); // Normal laser
              audio.playSFX('laser_normal');
            }
@@ -469,13 +497,15 @@ function updateCombat(dt) {
       const k3 = k * 3;
       _drone.set(boids.positions[k3], boids.positions[k3+1], boids.positions[k3+2]);
       
-      const scatter = new THREE.Vector3((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
+      const scatter = new THREE.Vector3((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*10);
       const targetPoint = gestureTarget.clone().add(scatter);
       
-      // Safety lock: NEVER shoot backwards to the screen!
-      if (targetPoint.z > _drone.z + 5) continue;
+      // Safety lock: target must always be in front of the drone (negative Z relative)
+      if (targetPoint.z >= _drone.z - 5) continue;
       
-      const shootDir = targetPoint.sub(_drone).normalize();
+      const shootDir = new THREE.Vector3().copy(targetPoint).sub(_drone).normalize();
+      // Final safety: never fire toward camera
+      if (shootDir.z > -0.05) continue;
       lasers.fire(_drone, shootDir, 250, true);
       audio.playSFX('laser_overload');
     }
@@ -568,11 +598,14 @@ function animate(now) {
     updateExplosions(dt);
     lasers.update(dt);
 
-    // Animate homeworld emissive pulse
-    if (homeworldMesh && homeworldMesh.material.emissive) {
-      const pulse = 0.5 + 0.5 * Math.sin(now * 0.002);
-      homeworldMesh.material.emissiveIntensity = 0.6 + pulse * 0.8;
-      homeworldMesh.rotation.y += dt * 0.2;
+    // Animate homeworld shader time
+    if (homeworldMesh && homeworldMesh.material.uniforms) {
+      homeworldMesh.material.uniforms.time.value += dt;
+      homeworldMesh.rotation.y += dt * 0.15;
+    } else if (homeworldMesh && homeworldMesh.material.emissive) {
+      // Fallback emissive pulse
+      homeworldMesh.material.emissiveIntensity = 0.6 + 0.4 * Math.sin(now * 0.002);
+      homeworldMesh.rotation.y += dt * 0.15;
     }
     
     if (aimCursor.visible) {
