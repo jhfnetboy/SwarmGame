@@ -62,13 +62,6 @@ def gesture_process(command_queue: Queue, stop_event: Event):
         raw_gesture, raw_x, raw_y = None, 0.0, 0.0
         if results.multi_hand_landmarks:
             raw_gesture, raw_x, raw_y = classify_gesture(results.multi_hand_landmarks)
-            open_ct = count_open_fingers(results.multi_hand_landmarks[0])
-            # 强制打印到终端，不使用 \r 以免被覆盖
-            print(f"[Gesture] Detected: {raw_gesture} | Fingers: {open_ct} | Hands: {len(results.multi_hand_landmarks)}")
-        else:
-            # 每 30 帧（约1秒）打印一次心跳，确认进程没死
-            if int(time.time()) % 2 == 0:
-                print("[Gesture] Heartbeat: Camera active, No hands detected...", end="\r")
             
         gesture_history.append((raw_gesture, raw_x, raw_y))
         if len(gesture_history) > HISTORY_LEN:
