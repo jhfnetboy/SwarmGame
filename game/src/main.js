@@ -97,42 +97,42 @@ function spawnWarship() {
 }
 
 function spawnHomeworld() {
-  const geo = new THREE.SphereGeometry(22, 128, 128); // high poly for displacement
+  const geo = new THREE.SphereGeometry(22, 64, 64);
   const uniforms = {
     time: { value: 0 },
     colorA: { value: new THREE.Color(0x112244) },
-    colorB: { value: new THREE.Color(0x003388) }
+    colorB: { value: new THREE.Color(0x0055ff) }
   };
   const mat = new THREE.ShaderMaterial({
     uniforms: uniforms,
     vertexShader: `
+      precision mediump float;
       uniform float time;
       varying vec3 vNormal;
-      varying vec3 vPosition;
+      varying vec3 vPos;
       void main() {
         vNormal = normalize(normalMatrix * normal);
-        vPosition = position;
-        // Simple pulsing displacement
-        float pulse = sin(position.y * 0.5 + time * 2.0) * cos(position.x * 0.5 + time) * 1.5;
-        vec3 pos = position + normal * pulse;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        vPos = position;
+        float pulse = sin(position.y * 0.4 + time * 1.5) * cos(position.x * 0.4 + time) * 2.0;
+        vec3 displaced = position + normal * pulse;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
       }
     `,
     fragmentShader: `
+      precision mediump float;
       uniform float time;
       uniform vec3 colorA;
       uniform vec3 colorB;
       varying vec3 vNormal;
-      varying vec3 vPosition;
+      varying vec3 vPos;
       
       void main() {
-        float noiseVal = sin(vPosition.x * 0.5 + time) * sin(vPosition.y * 0.5 + time) * sin(vPosition.z * 0.5 + time);
-        vec3 color = mix(colorA, colorB, noiseVal * 0.5 + 0.5);
-        // Rim lighting
-        vec3 viewDir = normalize(cameraPosition - vPosition);
-        float rim = 1.0 - max(dot(viewDir, normalize(vNormal)), 0.0);
-        rim = smoothstep(0.6, 1.0, rim);
-        gl_FragColor = vec4(color + vec3(0.0, 0.4, 1.0) * rim, 1.0);
+        float n = sin(vPos.x * 0.4 + time) * sin(vPos.y * 0.4 + time * 1.2) * sin(vPos.z * 0.4 + time * 0.8);
+        vec3 color = mix(colorA, colorB, n * 0.5 + 0.5);
+        // Simple rim based only on normal, no camera needed
+        float rim = max(0.0, 1.0 - abs(vNormal.z));
+        rim = smoothstep(0.5, 1.0, rim);
+        gl_FragColor = vec4(color + vec3(0.0, 0.2, 0.8) * rim, 1.0);
       }
     `
   });
