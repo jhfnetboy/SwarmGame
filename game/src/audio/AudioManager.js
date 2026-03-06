@@ -2,155 +2,146 @@ export class AudioManager {
   constructor() {
     this.ctx = null;
     this.bgmGain = null;
-    this.currentState = 'MENU';
+    this.sfxGain = null;
+    this.muted = false;
+    this.currentBGMState = null;
     this.bgmInterval = null;
     this.lastLaserTime = 0;
+    this._initialized = false;
   }
 
   init() {
-    if (this.ctx) return;
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    this.ctx = new AudioContext();
+    if (this._initialized) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    try {
+      this.ctx = new AudioCtx();
+      this._initialized = true;
 
-    this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.value = 0.4;
-    this.bgmGain.connect(this.ctx.destination);
-    
-    this.playBGM('MENU');
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = 0.3;
+      this.bgmGain.connect(this.ctx.destination);
+
+      this.sfxGain = this.ctx.createGain();
+      this.sfxGain.gain.value = 0.6;
+      this.sfxGain.connect(this.ctx.destination);
+
+      console.log('[Audio] AudioContext initialized');
+    } catch(e) {
+      console.warn('[Audio] Failed to init AudioContext:', e);
+    }
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.ctx) {
+      if (this.bgmGain)  this.bgmGain.gain.value  = this.muted ? 0 : 0.3;
+      if (this.sfxGain)  this.sfxGain.gain.value   = this.muted ? 0 : 0.6;
+    }
+    const btn = document.getElementById('mute-btn');
+    if (btn) {
+      btn.textContent = this.muted ? '🔇' : '🔊';
+      btn.classList.toggle('muted', this.muted);
+    }
+    return this.muted;
   }
 
   playSFX(type) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.muted) return;
     const t = this.ctx.currentTime;
-    
-    // Throttle laser sounds to avoid deafening ear-rape
+
+    // Throttle laser sounds
     if (type.startsWith('laser')) {
-      if (t - this.lastLaserTime < 0.05) return;
+      if (t - this.lastLaserTime < 0.06) return;
       this.lastLaserTime = t;
     }
-    
+
+    const play = (freq, endFreq, duration, wavetype, vol = 0.05) => {
+      try {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = wavetype;
+        osc.frequency.setValueAtTime(freq, t);
+        if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + duration);
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+        osc.connect(gain); gain.connect(this.sfxGain);
+        osc.start(t); osc.stop(t + duration);
+      } catch(e) {}
+    };
+
     if (type === 'laser_normal') {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(800 + Math.random()*200, t);
-      osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
-      
-      gain.gain.setValueAtTime(0.02, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-      
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.1);
-    }
-    else if (type === 'laser_overload') {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(300 + Math.random()*100, t);
-      osc.frequency.exponentialRampToValueAtTime(50, t + 0.3);
-      
-      gain.gain.setValueAtTime(0.08, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-      
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.3);
-    }
-    else if (type === 'explosion') {
-      // Noise burst synthesis
-      const bufferSize = this.ctx.sampleRate * 0.6; 
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const output = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-      }
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = buffer;
-      
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1000 + Math.random()*500, t);
-      filter.frequency.exponentialRampToValueAtTime(100, t + 0.5);
-      
-      const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0.15, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
-      
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.ctx.destination);
-      noise.start(t);
-    }
-    else if (type === 'ui') {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1200, t);
-      
-      gain.gain.setValueAtTime(0.1, t);
-      gain.gain.linearRampToValueAtTime(0, t + 0.1);
-      
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.1);
+      play(600 + Math.random()*200, 80, 0.12, 'square', 0.03);
+    } else if (type === 'laser_overload') {
+      play(250 + Math.random()*80, 40, 0.25, 'sawtooth', 0.07);
+    } else if (type === 'explosion') {
+      // Noise burst
+      try {
+        const bufSize = this.ctx.sampleRate * 0.5;
+        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const flt = this.ctx.createBiquadFilter();
+        flt.type = 'lowpass';
+        flt.frequency.setValueAtTime(800, t);
+        flt.frequency.exponentialRampToValueAtTime(80, t + 0.4);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.2, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        src.connect(flt); flt.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+      } catch(e) {}
+    } else if (type === 'ui') {
+      play(1400, 1800, 0.08, 'sine', 0.12);
     }
   }
 
   playBGM(state) {
     if (!this.ctx) return;
-    if (this.currentState === state && this.bgmInterval) return;
-    this.currentState = state;
-    
-    if (this.bgmInterval) {
-      clearInterval(this.bgmInterval);
-      this.bgmInterval = null;
-    }
-    
-    const playNote = (freq, duration, vol=0.1, type='sine') => {
+    if (this.currentBGMState === state) return;
+    this.currentBGMState = state;
+
+    if (this.bgmInterval) { clearInterval(this.bgmInterval); this.bgmInterval = null; }
+
+    const note = (freq, dur, vol = 0.08, type = 'sine') => {
+      if (!this.ctx || this.muted) return;
       const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, t);
-      gain.gain.setValueAtTime(vol, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + duration);
-      osc.connect(gain);
-      gain.connect(this.bgmGain);
-      osc.start(t);
-      osc.stop(t + duration);
+      try {
+        const osc = this.ctx.createOscillator();
+        const g   = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(g); g.connect(this.bgmGain);
+        osc.start(t); osc.stop(t + dur);
+      } catch(e) {}
     };
 
     if (state === 'MENU') {
-      let step = 0;
-      this.bgmInterval = setInterval(() => {
-        const notes = [220, 277.18, 329.63, 440];
-        playNote(notes[step % 4] / 2, 0.8, 0.08, 'sine');
-        step++;
-      }, 1000);
+      let i = 0;
+      const seq = [220, 277, 330, 440];
+      this.bgmInterval = setInterval(() => { note(seq[i++ % 4] * 0.5, 0.9, 0.07, 'sine'); }, 1000);
     } else if (state === 'BATTLE') {
-      let step = 0;
+      let i = 0;
+      const seq = [110, 130, 146, 130];
       this.bgmInterval = setInterval(() => {
-        const notes = [110, 130.81, 146.83, 164.81]; 
-        playNote(notes[step % 4], 0.2, 0.1, 'triangle');
-        if (step % 8 === 0) playNote(55, 0.4, 0.15, 'square'); 
-        step++;
-      }, 250);
+        note(seq[i % 4], 0.18, 0.09, 'triangle');
+        if (i % 8 === 0) note(55, 0.35, 0.12, 'square');
+        i++;
+      }, 220);
     } else if (state === 'CLIMAX') {
-      let step = 0;
+      let i = 0;
       this.bgmInterval = setInterval(() => {
-        const notes = [110, 116.54, 110, 116.54]; 
-        playNote(notes[step % 4], 0.15, 0.15, 'sawtooth');
-        playNote(82.41, 0.2, 0.15, 'square'); 
-        step++;
-      }, 150);
+        note(110, 0.12, 0.14, 'sawtooth');
+        note(82, 0.18, 0.12, 'square');
+        i++;
+      }, 140);
     } else if (state === 'GAMEOVER') {
-      playNote(110, 2.0, 0.2, 'sine');
-      playNote(82.41, 3.0, 0.2, 'sine');
+      note(110, 2.0, 0.18, 'sine');
+      setTimeout(() => note(82, 2.5, 0.15, 'sine'), 200);
     }
   }
 }

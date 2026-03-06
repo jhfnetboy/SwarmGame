@@ -1,62 +1,70 @@
 #!/bin/bash
 # start.sh — 一键启动 SwarmGame（游戏 + AI 中枢）
-# 启动前先 Kill 所有已占用的端口进程，避免残留进程干扰
+# 每次启动前强制清除所有缓存、Kill 所有旧进程
 
+set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 echo "╔══════════════════════════════════════════╗"
 echo "║      SwarmGame — Commander's Link        ║"
 echo "╚══════════════════════════════════════════╝"
 
-# ── 清理旧进程 ────────────────────────────────
-echo "[0/2] Cleaning up old processes..."
+# ── Step 0: 拉取最新代码 ─────────────────────
+echo "► git pull..."
+cd "$ROOT"
+git pull --ff-only 2>/dev/null || echo "  (git pull skipped)"
 
-# Kill 任何占用 5173 端口的进程（Vite dev server）
-PIDS_5173=$(lsof -ti tcp:5173 2>/dev/null)
-if [ -n "$PIDS_5173" ]; then
-    echo "  Killing old Vite (port 5173): PIDs $PIDS_5173"
-    kill -9 $PIDS_5173 2>/dev/null || true
-fi
+# ── Step 1: 杀死所有旧进程 ───────────────────
+echo "► Killing old processes..."
 
-# Kill 任何占用 8765 端口的进程（WebSocket AI Hub）
-PIDS_8765=$(lsof -ti tcp:8765 2>/dev/null)
-if [ -n "$PIDS_8765" ]; then
-    echo "  Killing old AI Hub (port 8765): PIDs $PIDS_8765"
-    kill -9 $PIDS_8765 2>/dev/null || true
-fi
+# Kill Vite dev server / preview (port 5173)
+lsof -ti tcp:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+# Kill WebSocket AI Hub (port 8765)
+lsof -ti tcp:8765 2>/dev/null | xargs kill -9 2>/dev/null || true
+# Kill any lingering python3 main.py processes
+pkill -f "python3 main.py" 2>/dev/null || true
+# Kill any lingering vite processes
+pkill -f "vite" 2>/dev/null || true
 
 sleep 1
 
-# ── 启动 AI 中枢 ──────────────────────────────
-echo "[1/2] Starting AI Hub (Voice + Gesture + WebSocket)..."
+# ── Step 2: 彻底清除 Vite 缓存 ───────────────
+echo "► Clearing all caches..."
+cd "$ROOT/game"
+rm -rf dist .vite node_modules/.vite node_modules/.cache
+
+# ── Step 3: 构建最新版本 ─────────────────────
+echo "► Building frontend..."
+pnpm build
+
+# ── Step 4: 启动 AI Hub ───────────────────────
+echo "► Starting AI Hub..."
 cd "$ROOT/ai_hub"
 source .venv/bin/activate
 python3 main.py &
 AI_PID=$!
-
 sleep 2
 
-# ── 启动游戏前端（先构建最新版本）────────────
-echo "[2/2] Building & Starting Game Frontend..."
+# ── Step 5: 启动静态服务器（preview 模式）────
+echo "► Starting Game Server..."
 cd "$ROOT/game"
-pnpm build
 pnpm preview --port 5173 &
 GAME_PID=$!
 
 echo ""
-echo "✅  Both services started!"
-echo "   🎮 Game:   http://localhost:5173"
-echo "   🧠 AI Hub: ws://localhost:8765"
+echo "✅  SwarmGame is running!"
+echo "   🎮 Open: http://localhost:5173"
+echo "   🧠 AI:   ws://localhost:8765"
+echo "   Press Ctrl+C to stop."
 echo ""
-echo "   Press Ctrl+C to stop everything."
 
 cleanup() {
-    echo ""
     echo "Shutting down..."
-    kill $AI_PID $GAME_PID 2>/dev/null
-    # Clean up ports again
-    lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
-    lsof -ti tcp:8765 | xargs kill -9 2>/dev/null || true
+    kill $AI_PID 2>/dev/null || true
+    kill $GAME_PID 2>/dev/null || true
+    lsof -ti tcp:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -ti tcp:8765 2>/dev/null | xargs kill -9 2>/dev/null || true
+    pkill -f "python3 main.py" 2>/dev/null || true
     exit 0
 }
 trap cleanup SIGINT SIGTERM

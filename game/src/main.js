@@ -97,44 +97,14 @@ function spawnWarship() {
 }
 
 function spawnHomeworld() {
-  const geo = new THREE.SphereGeometry(22, 64, 64);
-  const uniforms = {
-    time: { value: 0 },
-    colorA: { value: new THREE.Color(0x112244) },
-    colorB: { value: new THREE.Color(0x0055ff) }
-  };
-  const mat = new THREE.ShaderMaterial({
-    uniforms: uniforms,
-    vertexShader: `
-      precision mediump float;
-      uniform float time;
-      varying vec3 vNormal;
-      varying vec3 vPos;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vPos = position;
-        float pulse = sin(position.y * 0.4 + time * 1.5) * cos(position.x * 0.4 + time) * 2.0;
-        vec3 displaced = position + normal * pulse;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
-      }
-    `,
-    fragmentShader: `
-      precision mediump float;
-      uniform float time;
-      uniform vec3 colorA;
-      uniform vec3 colorB;
-      varying vec3 vNormal;
-      varying vec3 vPos;
-      
-      void main() {
-        float n = sin(vPos.x * 0.4 + time) * sin(vPos.y * 0.4 + time * 1.2) * sin(vPos.z * 0.4 + time * 0.8);
-        vec3 color = mix(colorA, colorB, n * 0.5 + 0.5);
-        // Simple rim based only on normal, no camera needed
-        float rim = max(0.0, 1.0 - abs(vNormal.z));
-        rim = smoothstep(0.5, 1.0, rim);
-        gl_FragColor = vec4(color + vec3(0.0, 0.2, 0.8) * rim, 1.0);
-      }
-    `
+  const geo = new THREE.SphereGeometry(22, 32, 32);
+  // Stable MeshStandardMaterial - no WebGL shader compilation risk
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x112244,
+    emissive: 0x002299,
+    emissiveIntensity: 0.8,
+    roughness: 0.5,
+    metalness: 0.4
   });
   homeworldMesh = new THREE.Mesh(geo, mat);
   // Fixed position dead center in front of the camera
@@ -142,7 +112,7 @@ function spawnHomeworld() {
   scene.add(homeworldMesh);
   homeworldHp = 8000;
   // Add point light on homeworld
-  const light = new THREE.PointLight(0x3366ff, 3, 200);
+  const light = new THREE.PointLight(0x3366ff, 4, 250);
   homeworldMesh.add(light);
 }
 
@@ -597,9 +567,12 @@ function animate(now) {
     swarmRenderer.update(dt);
     updateExplosions(dt);
     lasers.update(dt);
-    
-    if (homeworldMesh && homeworldMesh.material.uniforms) {
-      homeworldMesh.material.uniforms.time.value += dt;
+
+    // Animate homeworld emissive pulse
+    if (homeworldMesh && homeworldMesh.material.emissive) {
+      const pulse = 0.5 + 0.5 * Math.sin(now * 0.002);
+      homeworldMesh.material.emissiveIntensity = 0.6 + pulse * 0.8;
+      homeworldMesh.rotation.y += dt * 0.2;
     }
     
     if (aimCursor.visible) {
@@ -627,3 +600,4 @@ window.addEventListener('resize', () => {
 // ─── Global hooks for HTML buttons ──────────────────────────────────────────
 window._gameStart   = () => startGame();
 window._gameRestart = () => startGame();
+window._toggleMute  = () => audio.toggleMute();

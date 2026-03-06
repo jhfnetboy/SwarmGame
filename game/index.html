@@ -94,6 +94,20 @@
     }
     #restart-btn:hover { background: #ffffff22; }
 
+    /* Mute button */
+    #mute-btn {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(0,255,204,0.12);
+      border: 1px solid rgba(0,255,204,0.4);
+      color: #00ffcc; font-size: 22px;
+      cursor: pointer; pointer-events: all;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; transition: background 0.2s;
+    }
+    #mute-btn:hover { background: rgba(0,255,204,0.25); }
+    #mute-btn.muted { color: #555; border-color: #333; }
+
     /* Gesture hint */
     #gesture-hint {
       position: fixed; top: 120px; right: 24px; width: 260px;
@@ -186,6 +200,9 @@
     <div id="result-msg"></div>
     <button id="restart-btn" onclick="window._gameRestart && window._gameRestart()">↺ RESTART MISSION</button>
   </div>
+
+  <!-- Mute toggle -->
+  <button id="mute-btn" title="Toggle Sound" onclick="window._toggleMute && window._toggleMute()">🔊</button>
 
   <script type="module" src="/src/main.js"></script>
 </body>
