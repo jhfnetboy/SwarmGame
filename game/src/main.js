@@ -524,9 +524,9 @@ function updateCombat(dt) {
       }
     }
     if (dronesInRange > 0) {
-      // DPS = 50 (normal) or 150 (overload), scale by fraction of drones in range
+      // DPS: normal ~400 → 8000hp / 20s, overload ~1200 → 8000hp / 7s
       const fraction = Math.min(dronesInRange / 100, 1.0);
-      const dps = currentBoidState === STATES.OVERLOAD ? 150 : 50;
+      const dps = currentBoidState === STATES.OVERLOAD ? 1200 : 400;
       homeworldHp -= dps * fraction * dt;
     }
     if (homeworldHp <= 0) {
