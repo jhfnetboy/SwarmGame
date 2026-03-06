@@ -67,37 +67,37 @@ def gesture_process(command_queue: Queue, stop_event: Event):
         if len(gesture_history) > HISTORY_LEN:
             gesture_history.pop(0)
             
-        # 多数投票决定当前稳定手势（忽略 None，如果 None 居多则释放）
         gesture = None
         gx, gy = 0.0, 0.0
+        
+        # 使用简单的两三帧平滑即可，不要太严厉的多数投票防止卡死
         if gesture_history:
-            # 统计名称
-            names = [h[0] for h in gesture_history]
-            c = Counter(names)
-            most_common, count = c.most_common(1)[0]
-            # 至少有 6 帧稳定才认作该手势，否则维持上一次明确的手势或 None
-            if most_common is not None and count >= 6:
-                gesture = most_common
-                # 均值滤波取坐标平滑
-                valid_coords = [h for h in gesture_history if h[0] == gesture]
+            most_recent_gestures = [h[0] for h in gesture_history[-3:] if h[0] is not None]
+            if most_recent_gestures:
+                # 只要最近 3 帧里有有效手势，就采用最新的一帧
+                gesture = most_recent_gestures[-1]
+                # 找出对应手势的坐标做一下微小平均
+                valid_coords = [h for h in gesture_history[-3:] if h[0] == gesture]
                 gx = sum(h[1] for h in valid_coords) / len(valid_coords)
                 gy = sum(h[2] for h in valid_coords) / len(valid_coords)
 
         now = time.time()
-        # 对于带坐标的手势 (overload)，不用 debouncing 限流，只要位置变化就发送（前端带平滑插值）
-        # 给 gather/split 保留频率限制
         should_send = False
-        if gesture == "overload" and gesture == last_gesture:
-            should_send = True # 持续发送坐标
+        
+        if gesture == "overload":
+             # 永远允许发送，更新准星
+             should_send = True
         elif gesture and gesture != last_gesture and (now - last_sent_time) > DEBOUNCE_SEC:
-            should_send = True
-            
+             # 其他动作保留防抖
+             should_send = True
+             
         if should_send:
-            if gesture != "overload": 
-                print(f"[Gesture] 🎯 Confirmed: {gesture}")
-            command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
-            last_sent_time = now
+             if gesture != "overload": 
+                 print(f"[Gesture] 🎯 Confirmed: {gesture}")
+             command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
+             last_sent_time = now
 
+        # 更新历史状态
         if gesture is not None:
              last_gesture = gesture
 

@@ -13,9 +13,9 @@ from faster_whisper import WhisperModel
 from .command_parser import parse_command
 
 SAMPLE_RATE = 16000       # Whisper 固定采样率
-CHUNK_MS    = 300         # 每次读取的毫秒数
+CHUNK_MS    = 400         # 每次读取的毫秒数
 VAD_SILENCE = 0.5         # 静音超过此秒数则触发推理
-ENERGY_THR  = 0.01        # 能量阈值（避免噪音误触）
+ENERGY_THR  = 0.002       # 能量阈值（降低门限，对远处声音更敏感）
 MAX_RECORD  = 5.0         # 最长录音片段（秒）
 
 

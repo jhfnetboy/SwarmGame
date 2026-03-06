@@ -223,7 +223,7 @@ const gestureTarget = new THREE.Vector3(0, 0, -80);
 function onCommand(type, data) {
   const cmd = data.cmd;
   
-  if (gameState === 'MENU' && (cmd === 'start' || cmd === 'attack')) {
+  if (gameState === 'MENU' && (cmd === 'start' || cmd === 'attack' || cmd === 'overload')) {
     startGame(); return;
   }
   if (gameState !== 'RUNNING') return;
