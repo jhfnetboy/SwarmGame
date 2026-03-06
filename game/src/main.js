@@ -141,19 +141,28 @@ function spawnHomeworld() {
 // ─── Laser / Explosion FX ────────────────────────────────────────────────────
 const explosions = []; // { points, life, maxLife }
 
-// Create a visual aim cursor for gesture (Red Crosshair)
+// Create a visual aim cursor for gesture (Red Crosshair - using Lines, always visible from any angle)
 const aimGroup = new THREE.Group();
-const matCross = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+const crossMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
 
-// Vertical bar (width: 0.6, height: 6)
-const geoV = new THREE.PlaneGeometry(0.6, 6);
-const meshV = new THREE.Mesh(geoV, matCross);
-aimGroup.add(meshV);
+// Vertical arm: from (0,-4,0) to (0,4,0)
+const vGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, -4, 0), new THREE.Vector3(0, 4, 0)
+]);
+aimGroup.add(new THREE.Line(vGeo, crossMat));
 
-// Horizontal bar (width: 6, height: 0.6)
-const geoH = new THREE.PlaneGeometry(6, 0.6);
-const meshH = new THREE.Mesh(geoH, matCross);
-aimGroup.add(meshH);
+// Horizontal arm: from (-4,0,0) to (4,0,0)
+const hGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-4, 0, 0), new THREE.Vector3(4, 0, 0)
+]);
+aimGroup.add(new THREE.Line(hGeo, crossMat));
+
+// Gap dots at center for clarity (small offset points)
+const gapGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-0.8, 0, 0), new THREE.Vector3(-0.3, 0, 0),
+  new THREE.Vector3(0.3, 0, 0),  new THREE.Vector3(0.8, 0, 0),
+]);
+aimGroup.add(new THREE.Points(gapGeo, new THREE.PointsMaterial({ color: 0xff3300, size: 0.8 })));
 
 const aimCursor = aimGroup;
 aimCursor.position.set(0, 0, -65);
