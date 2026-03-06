@@ -62,8 +62,7 @@ def gesture_process(command_queue: Queue, stop_event: Event):
         raw_gesture, raw_x, raw_y = None, 0.0, 0.0
         if results.multi_hand_landmarks:
             raw_gesture, raw_x, raw_y = classify_gesture(results.multi_hand_landmarks)
-            # Debug: print finger count every frame
-            from .gesture_classifier import count_open_fingers
+            # Debug: print finger count every frame (no relative import needed)
             open_ct = count_open_fingers(results.multi_hand_landmarks[0])
             print(f"[Gesture] raw={raw_gesture} fingers={open_ct}", end="\r")
             
