@@ -15,8 +15,8 @@ document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
-camera.position.set(0, 20, 80);
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 10, 35);
+camera.lookAt(0, 0, -20);
 
 // Ambient light (subtle)
 scene.add(new THREE.AmbientLight(0x111133, 2));
@@ -54,10 +54,11 @@ function spawnAsteroid() {
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: 0x886644, roughness: 0.9, metalness: 0.1 });
   const mesh = new THREE.Mesh(geo, mat);
-  // Spawn from random edge
+  // Spawn from deep space (negative Z)
   const angle = Math.random() * Math.PI * 2;
-  const r = 140 + Math.random() * 30;
-  mesh.position.set(r * Math.cos(angle), (Math.random()-0.5)*60, r * Math.sin(angle));
+  const r = 50 + Math.random() * 30;
+  // Spawn far away in negative Z
+  mesh.position.set(r * Math.cos(angle), (Math.random()-0.5)*30, -180 - Math.random()*40);
   mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
   scene.add(mesh);
   const speed = 4 + Math.random() * 6;
@@ -82,9 +83,10 @@ function spawnWarship() {
     wing.position.set(Math.cos(i*Math.PI/2)*7, 0, Math.sin(i*Math.PI/2)*7);
     group.add(wing);
   }
-  const angle = Math.random() * Math.PI * 2;
-  const r = 120 + Math.random() * 40;
-  group.position.set(r * Math.cos(angle), (Math.random()-0.5)*40, r * Math.sin(angle));
+  // Warships come from deep Z as well
+  const angle = Math.random() * Math.PI; // upper hemisphere mostly
+  const r = 70 + Math.random() * 40;
+  group.position.set(r * Math.cos(angle), 10 + Math.random()*30, -160 - Math.random()*50);
   scene.add(group);
   const speed = 5 + Math.random() * 4;
   const vel = new THREE.Vector3(-group.position.x, 0, -group.position.z).normalize().multiplyScalar(speed);
@@ -115,7 +117,7 @@ const explosions = []; // { points, life, maxLife }
 const aimGeo = new THREE.TorusGeometry(3, 0.4, 8, 24);
 const aimMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true });
 const aimCursor = new THREE.Mesh(aimGeo, aimMat);
-aimCursor.position.set(0, 0, -40);
+aimCursor.position.set(0, 0, -80);
 aimCursor.visible = false;
 scene.add(aimCursor);
 
@@ -194,7 +196,7 @@ function startGame() {
 }
 
 function endGame(victory, msg) {
-  if (gameState !== 'RUNNING') return;
+  if (gameState === 'GAMEOVER') return;
   gameState = 'GAMEOVER';
   hud.stop();
   setBoidState(STATES.IDLE);
@@ -216,7 +218,7 @@ function setBoidState(s) {
 
 // ─── Command Handler ─────────────────────────────────────────────────────────
 // Global target cast from hand coordinates
-const gestureTarget = new THREE.Vector3(0, 0, -40); 
+const gestureTarget = new THREE.Vector3(0, 0, -80); 
 
 function onCommand(type, data) {
   const cmd = data.cmd;
@@ -274,7 +276,7 @@ function onCommand(type, data) {
       setBoidState(STATES.BATTLE);
       hud.showCommand('GATHER ✊');
       // Reset target to center
-      gestureTarget.set(0, 0, -40);
+      gestureTarget.set(0, 0, -80);
       aimCursor.visible = false;
       break;
   }
@@ -346,10 +348,10 @@ function updateCombat(dt) {
     e.mesh.rotation.y += e.rotSpeed * dt;
     if (e.mesh.children) e.mesh.children.forEach(c => { c.rotation.x += e.rotSpeed * dt * 0.5; });
 
-    // Check if enemy reached center (Player Base)
+    // Check if enemy reached center (Player Base near z=0)
     // We merely destroy the enemy mesh here so they don't pile up.
     // Drones DO NOT DIE. You command 4000 permanently.
-    if (e.mesh.position.length() < 15) {
+    if (e.mesh.position.z > -15 && e.mesh.position.lengthSq() < 900) {
       spawnExplosion(e.mesh.position.clone(), 0xff2200, 40);
       scene.remove(e.mesh);
       enemies.splice(i, 1);
@@ -505,10 +507,10 @@ function updateCombat(dt) {
 
   // Camera slow sway (keep z fixed so homeworld at z=-100 stays dead center)
   const t2 = performance.now() * 0.0005;
-  camera.position.x = Math.sin(t2) * 15;
-  camera.position.y = 20 + Math.sin(t2 * 1.5) * 5;
-  camera.position.z = 80;
-  camera.lookAt(0, Math.sin(t2 * 0.8) * 5, 0);
+  camera.position.x = Math.sin(t2) * 8;
+  camera.position.y = 10 + Math.sin(t2 * 1.5) * 3;
+  camera.position.z = 35;
+  camera.lookAt(0, Math.sin(t2 * 0.8) * 3, -40);
 }
 
 // ─── Main Loop ───────────────────────────────────────────────────────────────

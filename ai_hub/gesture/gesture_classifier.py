@@ -47,12 +47,13 @@ def classify_gesture(hand_landmarks_list) -> tuple[str | None, float, float]:
     if not hand_landmarks_list:
         return None, 0.0, 0.0
 
+    # 1. 首先检查是不是双手 SPLIT 动作
     if len(hand_landmarks_list) >= 2:
         dist = wrist_distance(hand_landmarks_list)
         if dist > SPLIT_WRIST_THRESHOLD:
             return "split", 0.0, 0.0
 
-    # 单手分析（取第一只手）
+    # 2. 如果不是明确的 SPLIT，退而求其次分析第一只手（主导手）
     lm = hand_landmarks_list[0].landmark
     open_count = count_open_fingers(hand_landmarks_list[0])
     
@@ -60,9 +61,10 @@ def classify_gesture(hand_landmarks_list) -> tuple[str | None, float, float]:
     cx = (lm[0].x + lm[9].x) / 2.0
     cy = (lm[0].y + lm[9].y) / 2.0
     
+    # 即使画面出现两手，只有张开度足够，也认作指令
     if open_count >= 4:
         return "overload", cx, cy
-    if open_count == 0:
+    if open_count <= 1:
         return "gather", cx, cy
 
     return None, 0.0, 0.0
