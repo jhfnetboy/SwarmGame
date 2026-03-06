@@ -96,9 +96,6 @@ def gesture_process(command_queue: Queue, stop_event: Event):
                  print(f"[Gesture] 🎯 Confirmed: {gesture}")
              command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
              last_sent_time = now
-
-        # 更新历史状态
-        if gesture is not None:
              last_gesture = gesture
 
         # 帧率控制

@@ -117,6 +117,7 @@ const explosions = []; // { points, life, maxLife }
 const aimGeo = new THREE.TorusGeometry(3, 0.4, 8, 24);
 const aimMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true });
 const aimCursor = new THREE.Mesh(aimGeo, aimMat);
+aimCursor.rotation.x = Math.PI / 2;
 aimCursor.position.set(0, 0, -80);
 aimCursor.visible = false;
 scene.add(aimCursor);
