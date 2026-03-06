@@ -512,16 +512,22 @@ function updateCombat(dt) {
   }
 
   // Homeworld combat (CLIMAX phase)
+  // Use a single accumulator so damage is frame-rate independent
   if (homeworldMesh && homeworldHp > 0) {
+    let dronesInRange = 0;
     const step = Math.max(1, (boids.count / 100) | 0);
     for (let k = 0; k < boids.count; k += step) {
       const k3 = k * 3;
       _drone.set(boids.positions[k3], boids.positions[k3+1], boids.positions[k3+2]);
-      // Check distance to the front surface area
       if (_drone.distanceTo(homeworldMesh.position) < 45) {
-        const dmg = currentBoidState === STATES.OVERLOAD ? 12.0 : 4.0;
-        homeworldHp -= dmg;
+        dronesInRange++;
       }
+    }
+    if (dronesInRange > 0) {
+      // DPS = 50 (normal) or 150 (overload), scale by fraction of drones in range
+      const fraction = Math.min(dronesInRange / 100, 1.0);
+      const dps = currentBoidState === STATES.OVERLOAD ? 150 : 50;
+      homeworldHp -= dps * fraction * dt;
     }
     if (homeworldHp <= 0) {
       gameState = 'VICTORY_ANIM';
