@@ -77,8 +77,8 @@ export class LaserFX {
         
         // Update matrix
         this._dummy.position.set(this.data[idx], this.data[idx+1], this.data[idx+2]);
-        this._lookDir.set(vx, vy, vz).normalize();
-        this._dummy.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), this._lookDir);
+        // Instead of quaternion math, just look at the future position
+        this._dummy.lookAt(this.data[idx] + vx, this.data[idx+1] + vy, this.data[idx+2] + vz);
         
         // scale based on life and type
         const t = (isOverload ? 8 : 1) * life; // Make overload laser much thicker

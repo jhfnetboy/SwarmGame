@@ -113,11 +113,21 @@ function spawnHomeworld() {
 // ─── Laser / Explosion FX ────────────────────────────────────────────────────
 const explosions = []; // { points, life, maxLife }
 
-// Create a visual aim cursor for gesture
-const aimGeo = new THREE.TorusGeometry(3, 0.4, 8, 24);
-const aimMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true });
-const aimCursor = new THREE.Mesh(aimGeo, aimMat);
-aimCursor.rotation.x = Math.PI / 2;
+// Create a visual aim cursor for gesture (Red Crosshair)
+const aimGroup = new THREE.Group();
+const matCross = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+
+// Vertical bar (width: 0.6, height: 6)
+const geoV = new THREE.PlaneGeometry(0.6, 6);
+const meshV = new THREE.Mesh(geoV, matCross);
+aimGroup.add(meshV);
+
+// Horizontal bar (width: 6, height: 0.6)
+const geoH = new THREE.PlaneGeometry(6, 0.6);
+const meshH = new THREE.Mesh(geoH, matCross);
+aimGroup.add(meshH);
+
+const aimCursor = aimGroup;
 aimCursor.position.set(0, 0, -80);
 aimCursor.visible = false;
 scene.add(aimCursor);
@@ -349,13 +359,13 @@ function updateCombat(dt) {
     e.mesh.rotation.y += e.rotSpeed * dt;
     if (e.mesh.children) e.mesh.children.forEach(c => { c.rotation.x += e.rotSpeed * dt * 0.5; });
 
-    // Check if enemy reached center (Player Base near z=0)
-    // We merely destroy the enemy mesh here so they don't pile up.
-    // Drones DO NOT DIE. You command 4000 permanently.
-    if (e.mesh.position.z > -15 && e.mesh.position.lengthSq() < 900) {
+    // Check if enemy breached defense perimeter (Z > -30)
+    // Destroy enemy immediately so they NEVER fly past the camera and drones never shoot backward!
+    if (e.mesh.position.z > -30) {
       spawnExplosion(e.mesh.position.clone(), 0xff2200, 40);
       scene.remove(e.mesh);
       enemies.splice(i, 1);
+      // To-do: Add Base Damage logic to HUD
       continue;
     }
 
@@ -378,6 +388,9 @@ function updateCombat(dt) {
         
         const k3 = k * 3;
         _drone.set(boids.positions[k3], boids.positions[k3+1], boids.positions[k3+2]);
+        
+        // Safety lock: NEVER shoot backwards to the screen!
+        if (epos.z > _drone.z + 5) continue;
         
         // In overload mode, shoot toward gestureTarget area rather than just nearest enemy
         // Allow a wide cone of damage near the gesture point
@@ -443,8 +456,11 @@ function updateCombat(dt) {
       
       const scatter = new THREE.Vector3((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
       const targetPoint = gestureTarget.clone().add(scatter);
-      const shootDir = targetPoint.sub(_drone).normalize();
       
+      // Safety lock: NEVER shoot backwards to the screen!
+      if (targetPoint.z > _drone.z + 5) continue;
+      
+      const shootDir = targetPoint.sub(_drone).normalize();
       lasers.fire(_drone, shootDir, 250, true);
     }
   }
