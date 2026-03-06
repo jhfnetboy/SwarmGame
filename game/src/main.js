@@ -5,6 +5,7 @@ import { BackgroundStars } from './fx/BackgroundStars.js';
 import { HUD } from './hud/HUD.js';
 import { CommandReceiver } from './net/CommandReceiver.js';
 import { LaserFX } from './fx/LaserFX.js';
+import { AudioManager } from './audio/AudioManager.js';
 
 // ─── Renderer & Scene ────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -35,6 +36,7 @@ const net = new CommandReceiver('ws://localhost:8765', (type, data) => {
   }
 });
 const lasers = new LaserFX(scene, 1000);
+const audio = new AudioManager();
 
 // ─── Enemy Pool ──────────────────────────────────────────────────────────────
 const enemies = []; // { mesh, hp, maxHp, type, velocity }
@@ -95,16 +97,50 @@ function spawnWarship() {
 }
 
 function spawnHomeworld() {
-  const geo = new THREE.SphereGeometry(22, 32, 32);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x112244, emissive: 0x003388, emissiveIntensity: 0.5,
-    roughness: 0.6, metalness: 0.3
+  const geo = new THREE.SphereGeometry(22, 128, 128); // high poly for displacement
+  const uniforms = {
+    time: { value: 0 },
+    colorA: { value: new THREE.Color(0x112244) },
+    colorB: { value: new THREE.Color(0x003388) }
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: uniforms,
+    vertexShader: `
+      uniform float time;
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = position;
+        // Simple pulsing displacement
+        float pulse = sin(position.y * 0.5 + time * 2.0) * cos(position.x * 0.5 + time) * 1.5;
+        vec3 pos = position + normal * pulse;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 colorA;
+      uniform vec3 colorB;
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      
+      void main() {
+        float noiseVal = sin(vPosition.x * 0.5 + time) * sin(vPosition.y * 0.5 + time) * sin(vPosition.z * 0.5 + time);
+        vec3 color = mix(colorA, colorB, noiseVal * 0.5 + 0.5);
+        // Rim lighting
+        vec3 viewDir = normalize(cameraPosition - vPosition);
+        float rim = 1.0 - max(dot(viewDir, normalize(vNormal)), 0.0);
+        rim = smoothstep(0.6, 1.0, rim);
+        gl_FragColor = vec4(color + vec3(0.0, 0.4, 1.0) * rim, 1.0);
+      }
+    `
   });
   homeworldMesh = new THREE.Mesh(geo, mat);
   // Fixed position dead center in front of the camera
   homeworldMesh.position.set(0, 0, -100);
   scene.add(homeworldMesh);
-  homeworldHp = 100;
+  homeworldHp = 8000;
   // Add point light on homeworld
   const light = new THREE.PointLight(0x3366ff, 3, 200);
   homeworldMesh.add(light);
@@ -128,7 +164,7 @@ const meshH = new THREE.Mesh(geoH, matCross);
 aimGroup.add(meshH);
 
 const aimCursor = aimGroup;
-aimCursor.position.set(0, 0, -80);
+aimCursor.position.set(0, 0, -65);
 aimCursor.visible = false;
 scene.add(aimCursor);
 
@@ -147,6 +183,7 @@ function spawnExplosion(pos, color = 0xff6600, count = 80) {
   const pts = new THREE.Points(geo, mat);
   scene.add(pts);
   explosions.push({ points: pts, positions: geo.attributes.position, velocities: velocitiesArr, life: 1.5, maxLife: 1.5, mat });
+  audio.playSFX('explosion');
 }
 
 function updateExplosions(dt) {
@@ -179,6 +216,10 @@ let autoAttackTimer = 0;
 let homeworldSpawned = false;
 
 function startGame() {
+  audio.init();
+  audio.playBGM('BATTLE');
+  audio.playSFX('ui');
+  
   gameState = 'RUNNING';
   phaseTimer = 0;
   autoAttackTimer = 0;
@@ -211,6 +252,7 @@ function endGame(victory, msg) {
   gameState = 'GAMEOVER';
   hud.stop();
   setBoidState(STATES.IDLE);
+  audio.playBGM('GAMEOVER');
 
   const rs = document.getElementById('result-screen');
   const rt = document.getElementById('result-title');
@@ -229,7 +271,7 @@ function setBoidState(s) {
 
 // ─── Command Handler ─────────────────────────────────────────────────────────
 // Global target cast from hand coordinates
-const gestureTarget = new THREE.Vector3(0, 0, -80); 
+const gestureTarget = new THREE.Vector3(0, 0, -65); 
 
 function onCommand(type, data) {
   const cmd = data.cmd;
@@ -287,7 +329,7 @@ function onCommand(type, data) {
       setBoidState(STATES.BATTLE);
       hud.showCommand('GATHER ✊');
       // Reset target to center
-      gestureTarget.set(0, 0, -80);
+      gestureTarget.set(0, 0, -65);
       aimCursor.visible = false;
       break;
   }
@@ -349,7 +391,8 @@ function updateCombat(dt) {
     if (e.mesh.isGroup) return e.mesh.position;
     return e.mesh.position;
   });
-  if (homeworldMesh) targets.push(homeworldMesh.position);
+  // Aim slightly in front of the homeworld so drones don't fly inside/behind it
+  if (homeworldMesh) targets.push(homeworldMesh.position.clone().add(new THREE.Vector3(0, 0, 35)));
   boids.targets = targets;
 
   // Move enemies toward origin
@@ -410,6 +453,7 @@ function updateCombat(dt) {
              isHit = true;
            }
            lasers.fire(_drone, shootDir, 250, true); // Overload laser
+           audio.playSFX('laser_overload');
         } else {
            // Normal mode: precise auto-aim
            const dist = _drone.distanceTo(epos);
@@ -417,6 +461,7 @@ function updateCombat(dt) {
              isHit = true;
              shootDir.copy(epos).sub(_drone).normalize();
              lasers.fire(_drone, shootDir, 160, false); // Normal laser
+             audio.playSFX('laser_normal');
            }
         }
         
@@ -462,6 +507,7 @@ function updateCombat(dt) {
       
       const shootDir = targetPoint.sub(_drone).normalize();
       lasers.fire(_drone, shootDir, 250, true);
+      audio.playSFX('laser_overload');
     }
   }
 
@@ -471,10 +517,10 @@ function updateCombat(dt) {
     for (let k = 0; k < boids.count; k += step) {
       const k3 = k * 3;
       _drone.set(boids.positions[k3], boids.positions[k3+1], boids.positions[k3+2]);
-      if (_drone.distanceTo(homeworldMesh.position) < 30) {
-        const dmg = currentBoidState === STATES.OVERLOAD ? 0.3 : 0.1;
-        homeworldHp -= dmg * dt * 30;
-        break;
+      // Check distance to the front surface area
+      if (_drone.distanceTo(homeworldMesh.position) < 45) {
+        const dmg = currentBoidState === STATES.OVERLOAD ? 12.0 : 4.0;
+        homeworldHp -= dmg;
       }
     }
     if (homeworldHp <= 0) {
@@ -505,6 +551,7 @@ function updateCombat(dt) {
     enemies.forEach(e => { scene.remove(e.mesh); if(e.mesh.geometry) e.mesh.geometry.dispose(); });
     enemies.length = 0;
     
+    audio.playBGM('CLIMAX');
     hud.showCommand('⚠️ WARNING: ALIEN HOMEWORLD APPROACHING');
     document.getElementById('timer').style.color = '#ff2266';
   }
@@ -544,6 +591,10 @@ function animate(now) {
     swarmRenderer.update(dt);
     updateExplosions(dt);
     lasers.update(dt);
+    
+    if (homeworldMesh && homeworldMesh.material.uniforms) {
+      homeworldMesh.material.uniforms.time.value += dt;
+    }
     
     if (aimCursor.visible) {
       aimCursor.position.copy(gestureTarget);
