@@ -141,28 +141,23 @@ function spawnHomeworld() {
 // ─── Laser / Explosion FX ────────────────────────────────────────────────────
 const explosions = []; // { points, life, maxLife }
 
-// Create a visual aim cursor for gesture (Red Crosshair - using Lines, always visible from any angle)
+// Create a visual aim cursor for gesture (Robust Red Crosshair - using BoxGeometry for thickness)
 const aimGroup = new THREE.Group();
-const crossMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
+const crossMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 
-// Vertical arm: from (0,-4,0) to (0,4,0)
-const vGeo = new THREE.BufferGeometry().setFromPoints([
-  new THREE.Vector3(0, -4, 0), new THREE.Vector3(0, 4, 0)
-]);
-aimGroup.add(new THREE.Line(vGeo, crossMat));
+// Vertical bar (thick)
+const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 1.0), crossMat);
+aimGroup.add(vBar);
 
-// Horizontal arm: from (-4,0,0) to (4,0,0)
-const hGeo = new THREE.BufferGeometry().setFromPoints([
-  new THREE.Vector3(-4, 0, 0), new THREE.Vector3(4, 0, 0)
-]);
-aimGroup.add(new THREE.Line(hGeo, crossMat));
+// Horizontal bar (thick)
+const hBar = new THREE.Mesh(new THREE.BoxGeometry(8, 0.8, 1.0), crossMat);
+aimGroup.add(hBar);
 
-// Gap dots at center for clarity (small offset points)
-const gapGeo = new THREE.BufferGeometry().setFromPoints([
-  new THREE.Vector3(-0.8, 0, 0), new THREE.Vector3(-0.3, 0, 0),
-  new THREE.Vector3(0.3, 0, 0),  new THREE.Vector3(0.8, 0, 0),
-]);
-aimGroup.add(new THREE.Points(gapGeo, new THREE.PointsMaterial({ color: 0xff3300, size: 0.8 })));
+// Center ring (pulsing color)
+const ringGeo = new THREE.TorusGeometry(1.6, 0.15, 12, 32);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+aimGroup.add(ring);
 
 const aimCursor = aimGroup;
 aimCursor.position.set(0, 0, -65);

@@ -11,7 +11,7 @@ import cv2
 import mediapipe as mp
 from multiprocessing import Queue, Event
 
-from .gesture_classifier import classify_gesture
+from .gesture_classifier import classify_gesture, count_open_fingers
 
 CAMERA_INDEX   = 0      # Mac FaceTime 摄像头
 TARGET_FPS     = 30
