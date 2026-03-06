@@ -97,48 +97,45 @@ function spawnWarship() {
 }
 
 function spawnHomeworld() {
-  const geo = new THREE.SphereGeometry(22, 64, 64);
-  // ShaderMaterial - no precision declarations (Three.js injects them automatically)
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      time:   { value: 0.0 },
-      colorA: { value: new THREE.Color(0x0a1a44) },
-      colorB: { value: new THREE.Color(0x0055ff) }
-    },
-    vertexShader: `
-      uniform float time;
-      varying vec3 vNormal;
-      varying vec3 vPos;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vPos = position;
-        float pulse = sin(position.y * 0.4 + time * 1.5) * cos(position.x * 0.4 + time) * 2.2;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * pulse, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float time;
-      uniform vec3 colorA;
-      uniform vec3 colorB;
-      uniform vec3 cameraPosition;
-      varying vec3 vNormal;
-      varying vec3 vPos;
-      void main() {
-        float n = sin(vPos.x*0.4+time) * sin(vPos.y*0.4+time*1.2) * sin(vPos.z*0.4+time*0.8);
-        vec3 color = mix(colorA, colorB, n * 0.5 + 0.5);
-        vec3 viewDir = normalize(cameraPosition - vPos);
-        float rim = 1.0 - max(dot(viewDir, normalize(vNormal)), 0.0);
-        rim = smoothstep(0.5, 1.0, rim);
-        gl_FragColor = vec4(color + vec3(0.0, 0.3, 1.0) * rim * 0.8, 1.0);
-      }
-    `
+  const group = new THREE.Group();
+
+  // Core: lumpy deformed dark alien sphere
+  const coreGeo = new THREE.IcosahedronGeometry(20, 4);
+  // Randomly deform vertices for lumpy alien look
+  const pos = coreGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const noise = 1 + (Math.random() - 0.5) * 0.4;
+    pos.setXYZ(i, x * noise, y * noise, z * noise);
+  }
+  coreGeo.computeVertexNormals();
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: 0x0a0f33,
+    emissive: 0x001177,
+    emissiveIntensity: 1.2,
+    roughness: 0.9, metalness: 0.3,
   });
-  homeworldMesh = new THREE.Mesh(geo, mat);
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  group.add(core);
+
+  // Wireframe shell - gives alien textured feel
+  const wireGeo = new THREE.IcosahedronGeometry(21, 3);
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x003399, wireframe: true, transparent: true, opacity: 0.35 });
+  group.add(new THREE.Mesh(wireGeo, wireMat));
+
+  // Outer glow halo
+  const haloGeo = new THREE.SphereGeometry(25, 16, 16);
+  const haloMat = new THREE.MeshBasicMaterial({ color: 0x0044ff, transparent: true, opacity: 0.08, side: THREE.BackSide });
+  group.add(new THREE.Mesh(haloGeo, haloMat));
+
+  homeworldMesh = group;
   homeworldMesh.position.set(0, 0, -100);
   scene.add(homeworldMesh);
   homeworldHp = 8000;
-  const light = new THREE.PointLight(0x3366ff, 4, 250);
-  homeworldMesh.add(light);
+
+  // Pulsing point light
+  const light = new THREE.PointLight(0x3366ff, 5, 280);
+  group.add(light);
 }
 
 // ─── Laser / Explosion FX ────────────────────────────────────────────────────
