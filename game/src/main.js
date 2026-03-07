@@ -493,7 +493,7 @@ function triggerSmartBomb() {
   smartBombs.push({ mesh: ringMesh, mat: ringMat, scale: 1, maxScale: 40, life: 1.0, maxLife: 1.0 });
   
   // Implode audio
-  audio.playSFX('explosion');
+  audio.playSFX('smartbomb');
   
   // Instantly wipe all standard enemies within heavy range (Distance < 50)
   for (let i = enemies.length - 1; i >= 0; i--) {

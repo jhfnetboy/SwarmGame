@@ -9,10 +9,15 @@ import websockets
 from multiprocessing import Queue
 
 CLIENTS = set()
+CLIENTS_EVENT = None
 
 async def handler(websocket):
     CLIENTS.add(websocket)
-    print(f"[WS] Client connected: {websocket.remote_address}")
+    if CLIENTS_EVENT and not CLIENTS_EVENT.is_set():
+        CLIENTS_EVENT.set()
+        print("[WS] First client connected. Waking up hardware...", flush=True)
+        
+    print(f"[WS] Client connected: {websocket.remote_address} (Total: {len(CLIENTS)})")
     try:
         async for msg in websocket:
             pass  # 前端只读不写
@@ -20,7 +25,10 @@ async def handler(websocket):
         pass
     finally:
         CLIENTS.discard(websocket)
-        print(f"[WS] Client disconnected")
+        print(f"[WS] Client disconnected (Total: {len(CLIENTS)})")
+        if len(CLIENTS) == 0 and CLIENTS_EVENT:
+            CLIENTS_EVENT.clear()
+            print("[WS] Zero clients. Suspending hardware...", flush=True)
 
 async def broadcast(data: dict):
     if not CLIENTS:
@@ -54,7 +62,10 @@ def _safe_get(q: Queue):
     except Exception:
         return None
 
-async def run_server(command_queue: Queue, host='0.0.0.0', port=8765):
+async def run_server(command_queue: Queue, clients_event=None, host='0.0.0.0', port=8765):
+    global CLIENTS_EVENT
+    CLIENTS_EVENT = clients_event
+    
     print(f"[WS] Starting WebSocket server on ws://{host}:{port}")
     async with websockets.serve(handler, host, port):
         await queue_consumer(command_queue)

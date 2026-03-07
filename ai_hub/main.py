@@ -22,9 +22,9 @@ async def heartbeat(command_queue: mp.Queue):
 
 
 # ─── WebSocket Server Process ─────────────────────────────────────────────────
-def ws_server_process(command_queue: mp.Queue):
+def ws_server_process(command_queue: mp.Queue, clients_event: mp.Event):
     """在独立进程中运行 asyncio WebSocket 服务"""
-    asyncio.run(run_server(command_queue))
+    asyncio.run(run_server(command_queue, clients_event))
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -35,11 +35,12 @@ def main():
 
     command_queue = mp.Queue()
     stop_event    = mp.Event()
+    clients_event = mp.Event() # Track active browser connections
 
     processes = []
 
     # WebSocket server（主推送服务）
-    ws_proc = mp.Process(target=ws_server_process, args=(command_queue,), name="WSServer", daemon=True)
+    ws_proc = mp.Process(target=ws_server_process, args=(command_queue, clients_event), name="WSServer", daemon=True)
     ws_proc.start()
     processes.append(ws_proc)
     print("[Main] WebSocket server process started (port 8765)")
@@ -47,7 +48,7 @@ def main():
     # Voice recognition
     voice_proc = mp.Process(
         target=voice_process,
-        args=(command_queue, stop_event),
+        args=(command_queue, stop_event, clients_event),
         name="VoiceRecognizer",
         daemon=True
     )
@@ -58,9 +59,9 @@ def main():
     # Gesture recognition
     gesture_proc = mp.Process(
         target=gesture_process,
-        args=(command_queue, stop_event),
+        args=(command_queue, stop_event, clients_event),
         name="GestureTracker",
-        daemon=True
+        daemon=False  # Must be False to allow the orchestrator to spawn _run_tracker child
     )
     gesture_proc.start()
     processes.append(gesture_proc)

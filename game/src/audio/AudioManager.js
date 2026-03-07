@@ -110,6 +110,41 @@ export class AudioManager {
         src.connect(flt); flt.connect(g2); g2.connect(this.sfxGain);
         src.start(t);
       } catch(e) {}
+    } else if (type === 'smartbomb') {
+      // Massive screen-clearing explosion (heavy impact + long tail)
+      try {
+        // Deep Impact Kick
+        const o = this.ctx.createOscillator();
+        const g1 = this.ctx.createGain();
+        o.frequency.setValueAtTime(250, t);
+        o.frequency.exponentialRampToValueAtTime(10, t + 1.2);
+        g1.gain.setValueAtTime(0.8, t);
+        g1.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+        o.connect(g1); g1.connect(this.sfxGain);
+        o.start(t); o.stop(t + 1.5);
+        
+        // Massive Rumble Noise
+        const bufSize = this.ctx.sampleRate * 2.0; // 2 seconds of noise
+        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        
+        // Dynamic Filter for "WHOOSH" into rumble
+        const flt = this.ctx.createBiquadFilter();
+        flt.type = 'lowpass';
+        flt.frequency.setValueAtTime(3000, t);
+        flt.frequency.exponentialRampToValueAtTime(50, t + 2.0);
+        
+        const g2 = this.ctx.createGain();
+        g2.gain.setValueAtTime(0.001, t);
+        g2.gain.linearRampToValueAtTime(0.6, t + 0.1); // Fast attack
+        g2.gain.exponentialRampToValueAtTime(0.001, t + 2.0); // Long decay
+        
+        src.connect(flt); flt.connect(g2); g2.connect(this.sfxGain);
+        src.start(t);
+      } catch(e) { console.error('smartbomb error:', e); }
     } else if (type === 'ui') {
       dualPlay(1400, 2100, 1800, 0.1, 'sine', 'sine', 0.1);
     }
