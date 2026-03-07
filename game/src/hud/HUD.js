@@ -19,8 +19,10 @@ export class HUD {
     this.$warships   = document.getElementById('warship-count');
     this.$homeworld  = document.getElementById('homeworld-hp');
     this.$feedback   = document.getElementById('cmd-feedback');
+    this.$voiceStatus = document.getElementById('voice-status');
 
     this._feedbackTimer = null;
+    this._voiceTimer = null;
     this._lastUpdate = 0;
   }
 
@@ -95,5 +97,14 @@ export class HUD {
     this._feedbackTimer = setTimeout(() => {
       this.$feedback.classList.remove('show');
     }, 1800);
+  }
+  
+  showSpeech(text) {
+    this.$voiceStatus.innerHTML = `🎙️ <span style="opacity:0.8">${text}</span>`;
+    this.$voiceStatus.classList.add('show');
+    clearTimeout(this._voiceTimer);
+    this._voiceTimer = setTimeout(() => {
+      this.$voiceStatus.classList.remove('show');
+    }, 3000); // 留存长一点让玩家能看清
   }
 }

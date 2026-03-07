@@ -265,6 +265,12 @@ function setBoidState(s) {
 const gestureTarget = new THREE.Vector3(0, 0, -65); 
 
 function onCommand(type, data) {
+  // Catch raw speech for UI feedback
+  if (type === 'speech' && data.text) {
+    hud.showSpeech(data.text);
+    return;
+  }
+
   const cmd = data.cmd;
   
   if (gameState === 'MENU' && (cmd === 'start' || cmd === 'attack' || cmd === 'overload')) {
