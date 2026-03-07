@@ -28,9 +28,13 @@ def voice_process(command_queue, stop_event):
     主循环：在独立子进程中运行。
     将识别到的指令 dict 放入 command_queue。
     """
-    print("[Voice] Loading Whisper tiny (int8)...")
-    model = WhisperModel("tiny", device="cpu", compute_type="int8")
-    print("[Voice] Whisper ready. Listening...")
+    try:
+        print("[Voice] Loading Whisper tiny (int8)...", flush=True)
+        model = WhisperModel("tiny", device="cpu", compute_type="int8", download_root=".")
+        print("[Voice] Whisper ready. Listening...", flush=True)
+    except Exception as e:
+        print(f"[Voice] ERROR initializing Whisper: {e}", flush=True)
+        return
 
     chunk_size = int(SAMPLE_RATE * CHUNK_MS / 1000)
     buffer = []
@@ -47,7 +51,9 @@ def voice_process(command_queue, stop_event):
             while not stop_event.is_set():
                 audio_chunk, _ = stream.read(chunk_size)
                 audio_flat = audio_chunk.flatten()
-                rms = _rms(audio_flat)
+                
+                # Normalize raw int16 (-32768~32767) to (0~1.0) energy magnitude scale
+                rms = _rms(audio_flat) / 32768.0
 
                 if rms > ENERGY_THR:
                     buffer.append(audio_flat)
@@ -56,7 +62,8 @@ def voice_process(command_queue, stop_event):
                 elif recording:
                     silence_time += CHUNK_MS / 1000.0
                     buffer.append(audio_flat)  # include trailing silence
-
+                
+                if recording:
                     total_sec = len(buffer) * CHUNK_MS / 1000.0
                     if silence_time >= VAD_SILENCE or total_sec >= MAX_RECORD:
                         # Transcribe
@@ -70,13 +77,13 @@ def voice_process(command_queue, stop_event):
                             )
                             text = " ".join(s.text for s in segments).strip()
                             if text:
-                                print(f"[Voice] STT: '{text}'")
+                                print(f"[Voice] STT: '{text}'", flush=True)
                                 cmd = parse_command(text)
                                 if cmd:
-                                    print(f"[Voice] → Command: {cmd}")
+                                    print(f"        → Command: {cmd}", flush=True)
                                     command_queue.put({"type": "voice", "cmd": cmd})
                         except Exception as e:
-                            print(f"[Voice] transcribe error: {e}")
+                            print(f"[Voice] transcribe error: {e}", flush=True)
 
                         buffer = []
                         silence_time = 0.0

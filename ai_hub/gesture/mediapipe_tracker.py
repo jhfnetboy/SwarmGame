@@ -90,10 +90,13 @@ def gesture_process(command_queue: Queue, stop_event: Event):
         elif gesture and gesture != last_gesture and (now - last_sent_time) > DEBOUNCE_SEC:
              # 其他动作保留防抖
              should_send = True
+        elif not gesture:
+             # 无手势时重置分类器，允许后续触发相同的动作
+             last_gesture = None
              
         if should_send:
              if gesture != "overload": 
-                 print(f"[Gesture] 🎯 Confirmed: {gesture}")
+                 print(f"[Gesture] 🎯 Confirmed: {gesture}", flush=True)
              command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
              last_sent_time = now
              last_gesture = gesture

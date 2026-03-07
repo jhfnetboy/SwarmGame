@@ -99,42 +99,37 @@ function spawnWarship() {
 function spawnHomeworld() {
   const group = new THREE.Group();
 
-  // Core: lumpy deformed dark alien sphere
-  const coreGeo = new THREE.IcosahedronGeometry(20, 4);
-  // Randomly deform vertices for lumpy alien look
-  const pos = coreGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const noise = 1 + (Math.random() - 0.5) * 0.4;
-    pos.setXYZ(i, x * noise, y * noise, z * noise);
-  }
-  coreGeo.computeVertexNormals();
+  // Core: Glowing cybernetic sphere (smooth, less vertices for performance)
+  const coreGeo = new THREE.SphereGeometry(22, 32, 32); // Using Sphere to avoid FPS drop from computing Icosahedron normals
   const coreMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0f33,
-    emissive: 0x001177,
-    emissiveIntensity: 1.2,
-    roughness: 0.9, metalness: 0.3,
+    color: 0xffffff,
+    emissive: 0x9900ff, // Bright purple neon glow
+    emissiveIntensity: 1.5,
+    roughness: 0.1, 
+    metalness: 0.8,
   });
   const core = new THREE.Mesh(coreGeo, coreMat);
   group.add(core);
 
-  // Wireframe shell - gives alien textured feel
-  const wireGeo = new THREE.IcosahedronGeometry(21, 3);
-  const wireMat = new THREE.MeshBasicMaterial({ color: 0x003399, wireframe: true, transparent: true, opacity: 0.35 });
+  // Wireframe energy shell - slightly larger
+  const wireGeo = new THREE.SphereGeometry(23.5, 16, 16);
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.5 });
   group.add(new THREE.Mesh(wireGeo, wireMat));
 
-  // Outer glow halo
-  const haloGeo = new THREE.SphereGeometry(25, 16, 16);
-  const haloMat = new THREE.MeshBasicMaterial({ color: 0x0044ff, transparent: true, opacity: 0.08, side: THREE.BackSide });
+  // Outer glow halo - much brighter
+  const haloGeo = new THREE.SphereGeometry(28, 16, 16);
+  const haloMat = new THREE.MeshBasicMaterial({ color: 0xff33cc, transparent: true, opacity: 0.15, side: THREE.BackSide });
   group.add(new THREE.Mesh(haloGeo, haloMat));
 
   homeworldMesh = group;
   homeworldMesh.position.set(0, 0, -100);
   scene.add(homeworldMesh);
-  homeworldHp = 8000;
+  
+  // Set HP higher to make the battle last ~15 seconds
+  homeworldHp = 18000;
 
-  // Pulsing point light
-  const light = new THREE.PointLight(0x3366ff, 5, 280);
+  // Pulsing point light (less intense to avoid shader drops)
+  const light = new THREE.PointLight(0xff00ff, 3, 200);
   group.add(light);
 }
 
@@ -539,9 +534,12 @@ function updateCombat(dt) {
       spawnExplosion(p, 0x0066ff, 300);
       setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(10, 10, 5)), 0xffffff, 200), 500);
       setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(-15, -5, 0)), 0xffaadd, 200), 1200);
-      setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(0, 0, 15)), 0x00ffff, 400), 2000);
+      setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(0, 20, 10)), 0xff00ff, 300), 2200);
+      setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(5, -15, -5)), 0x00ffcc, 250), 3000);
+      setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(-20, 10, -10)), 0xff3300, 350), 3800);
+      setTimeout(() => spawnExplosion(p.clone().add(new THREE.Vector3(0, 0, 15)), 0x00ffff, 600), 4500);
       
-      setTimeout(() => endGame(true, 'HOMEWORLD DESTROYED — HUMANITY SAVED'), 3500);
+      setTimeout(() => endGame(true, 'HOMEWORLD DESTROYED — HUMANITY SAVED'), 5500);
     }
   }
 
@@ -600,13 +598,17 @@ function animate(now) {
     lasers.update(dt);
 
     // Animate homeworld shader time
-    if (homeworldMesh && homeworldMesh.material.uniforms) {
-      homeworldMesh.material.uniforms.time.value += dt;
+    if (homeworldMesh) {
       homeworldMesh.rotation.y += dt * 0.15;
-    } else if (homeworldMesh && homeworldMesh.material.emissive) {
-      // Fallback emissive pulse
-      homeworldMesh.material.emissiveIntensity = 0.6 + 0.4 * Math.sin(now * 0.002);
-      homeworldMesh.rotation.y += dt * 0.15;
+      const core = homeworldMesh.children[0];
+      if (core && core.material) {
+        if (core.material.uniforms) {
+          core.material.uniforms.time.value += dt;
+        } else if (core.material.emissive) {
+          // Fallback emissive pulse
+          core.material.emissiveIntensity = 0.6 + 0.4 * Math.sin(now * 0.002);
+        }
+      }
     }
     
     if (aimCursor.visible) {
