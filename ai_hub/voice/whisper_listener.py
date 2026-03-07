@@ -78,6 +78,9 @@ def voice_process(command_queue, stop_event):
                             text = " ".join(s.text for s in segments).strip()
                             if text:
                                 print(f"[Voice] STT: '{text}'", flush=True)
+                                # Always push the raw text to UI for feedback
+                                command_queue.put({"type": "speech", "text": text})
+                                
                                 cmd = parse_command(text)
                                 if cmd:
                                     print(f"        → Command: {cmd}", flush=True)
