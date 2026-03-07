@@ -79,7 +79,18 @@ def main():
         stop_event.set()
         for p in processes:
             p.terminate()
+        try:
+            import os # Kill process group to destroy any orphaned sub-subprocesses
+            os.killpg(os.getpgid(0), signal.SIGKILL)
+        except Exception:
+            pass
         sys.exit(0)
+
+    try:
+        import os
+        os.setpgrp()
+    except Exception:
+        pass
 
     signal.signal(signal.SIGINT,  shutdown)
     signal.signal(signal.SIGTERM, shutdown)

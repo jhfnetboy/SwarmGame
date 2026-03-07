@@ -23,6 +23,8 @@ lsof -ti tcp:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
 lsof -ti tcp:8765 2>/dev/null | xargs kill -9 2>/dev/null || true
 # Kill any lingering python3 main.py processes
 pkill -f "python3 main.py" 2>/dev/null || true
+# Deep kill to ensure mac AVFoundation python orphans are explicitly nuked
+ps aux | grep -i "python" | grep -i "ai_hub" | awk '{print $2}' | xargs kill -9 2>/dev/null || true
 # Kill any lingering vite processes
 pkill -f "vite" 2>/dev/null || true
 
@@ -65,6 +67,8 @@ cleanup() {
     lsof -ti tcp:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
     lsof -ti tcp:8765 2>/dev/null | xargs kill -9 2>/dev/null || true
     pkill -f "python3 main.py" 2>/dev/null || true
+    # Deep kill to ensure mac AVFoundation python orphans are explicitly nuked
+    ps aux | grep -i "python" | grep -i "ai_hub" | awk '{print $2}' | xargs kill -9 2>/dev/null || true
     exit 0
 }
 trap cleanup SIGINT SIGTERM

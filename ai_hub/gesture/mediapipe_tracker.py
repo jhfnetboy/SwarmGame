@@ -46,70 +46,79 @@ def _run_tracker(command_queue: Queue, internal_stop: Event):
     gesture_history = []
     HISTORY_LEN = 12
 
-    while not internal_stop.is_set():
-        t0 = time.time()
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.05)
-            continue
+    try:
+        while not internal_stop.is_set():
+            t0 = time.time()
+            ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.05)
+                continue
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        rgb.flags.writeable = False
-        results = hands_sol.process(rgb)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgb.flags.writeable = False
+            results = hands_sol.process(rgb)
 
-        raw_gesture, raw_x, raw_y = None, 0.0, 0.0
-        if results.multi_hand_landmarks:
-            raw_gesture, raw_x, raw_y = classify_gesture(results.multi_hand_landmarks)
+            raw_gesture, raw_x, raw_y = None, 0.0, 0.0
+            if results.multi_hand_landmarks:
+                raw_gesture, raw_x, raw_y = classify_gesture(results.multi_hand_landmarks)
+                
+            gesture_history.append((raw_gesture, raw_x, raw_y))
+            if len(gesture_history) > HISTORY_LEN:
+                gesture_history.pop(0)
+                
+            gesture = None
+            gx, gy = 0.0, 0.0
             
-        gesture_history.append((raw_gesture, raw_x, raw_y))
-        if len(gesture_history) > HISTORY_LEN:
-            gesture_history.pop(0)
-            
-        gesture = None
-        gx, gy = 0.0, 0.0
-        
-        if gesture_history:
-            most_recent_gestures = [h[0] for h in gesture_history[-3:] if h[0] is not None]
-            if most_recent_gestures:
-                gesture = most_recent_gestures[-1]
-                valid_coords = [h for h in gesture_history[-3:] if h[0] == gesture]
-                gx = sum(h[1] for h in valid_coords) / len(valid_coords)
-                gy = sum(h[2] for h in valid_coords) / len(valid_coords)
+            if gesture_history:
+                most_recent_gestures = [h[0] for h in gesture_history[-3:] if h[0] is not None]
+                if most_recent_gestures:
+                    gesture = most_recent_gestures[-1]
+                    valid_coords = [h for h in gesture_history[-3:] if h[0] == gesture]
+                    gx = sum(h[1] for h in valid_coords) / len(valid_coords)
+                    gy = sum(h[2] for h in valid_coords) / len(valid_coords)
 
-        now = time.time()
-        should_send = False
-        
-        if gesture == "overload":
-             should_send = True
-        elif gesture and gesture != last_gesture and (now - last_sent_time) > DEBOUNCE_SEC:
-             should_send = True
-        elif not gesture:
-             last_gesture = None
-             
-        if should_send:
-             if gesture == "overload": 
-                 if (now - last_print_time) > 1.0:
-                     print(f"[Gesture] 🎯 Confirmed: {gesture} (Throttled Log)", flush=True)
-                     last_print_time = now
-             else:
-                 print(f"[Gesture] 🎯 Confirmed: {gesture}", flush=True)
-                 last_sent_time = now
+            now = time.time()
+            should_send = False
+            
+            if gesture == "overload":
+                 should_send = True
+            elif gesture and gesture != last_gesture and (now - last_sent_time) > DEBOUNCE_SEC:
+                 should_send = True
+            elif not gesture:
+                 last_gesture = None
                  
-             command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
-             last_gesture = gesture
+            if should_send:
+                 if gesture == "overload": 
+                     if (now - last_print_time) > 1.0:
+                         print(f"[Gesture] 🎯 Confirmed: {gesture} (Throttled Log)", flush=True)
+                         last_print_time = now
+                 else:
+                     print(f"[Gesture] 🎯 Confirmed: {gesture}", flush=True)
+                     last_sent_time = now
+                     
+                 command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
+                 last_gesture = gesture
 
-        elapsed = time.time() - t0
-        sleep_t = frame_interval - elapsed
-        if sleep_t > 0:
-            time.sleep(sleep_t)
-
-    print("[Gesture] Engine tearing down pipeline...", flush=True)
-    hands_sol.close()
-    if cap is not None:
-        cap.release()
-        for _ in range(5):
-            cv2.waitKey(10)
-    print("[Gesture] Engine cleanly exited.", flush=True)
+            elapsed = time.time() - t0
+            sleep_t = frame_interval - elapsed
+            if sleep_t > 0:
+                time.sleep(sleep_t)
+                
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        print(f"[Gesture] ⚠️ Fatal Error in Engine: {e}", flush=True)
+    finally:
+        print("[Gesture] Engine tearing down pipeline...", flush=True)
+        try:
+            hands_sol.close()
+        except:
+            pass
+        if cap is not None:
+            cap.release()
+            for _ in range(5):
+                cv2.waitKey(10)
+        print("[Gesture] Engine cleanly exited.", flush=True)
 
 import multiprocessing
 
