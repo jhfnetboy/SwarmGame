@@ -37,6 +37,7 @@ const net = new CommandReceiver('ws://localhost:8765', (type, data) => {
 });
 const lasers = new LaserFX(scene, 1000);
 const audio = new AudioManager();
+window.audio = audio; // Expose globally for index.html onclick handlers
 
 // ─── Enemy Pool ──────────────────────────────────────────────────────────────
 const enemies = []; // { mesh, hp, maxHp, type, velocity }
@@ -123,35 +124,17 @@ function spawnHomeworld() {
       varying vec2 vUv;
       varying vec3 vPos;
       
-      // Simple 3D noise function
-      float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
-      vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
-      vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x);}
-      float noise(vec3 p){
-          vec3 a = floor(p);
-          vec3 d = p - a;
-          d = d * d * (3.0 - 2.0 * d);
-          vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
-          vec4 k1 = perm(b.xyxy);
-          vec4 k2 = perm(k1.xyxy + b.zzww);
-          vec4 c = k2 + a.zzzz;
-          vec4 k3 = perm(c);
-          vec4 k4 = perm(c + 1.0);
-          vec4 o1 = fract(k3 * (1.0 / 41.0));
-          vec4 o2 = fract(k4 * (1.0 / 41.0));
-          vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
-          vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
-          return o4.y * d.y + o4.x * (1.0 - d.y);
-      }
-      
       void main() {
-        // Fast pulsing noise
-        float n = noise(vPos * 0.15 + time * 1.2);
-        // Slow breathing noise
-        float n2 = noise(vPos * 0.05 - time * 0.5);
+        // Ultra-fast sine wave interference (replaces heavy 3D procedural noise)
+        float n1 = sin(vPos.x * 0.3 + time * 2.0);
+        float n2 = sin(vPos.y * 0.4 - time * 1.5);
+        float n3 = sin(vPos.z * 0.5 + time * 1.0);
         
-        // Biological veiny pattern
-        float pattern = smoothstep(0.4, 0.6, abs(n - n2));
+        // Combine into a cellular-like pulsating pattern
+        float pattern = (n1 * n2 * n3) * 0.5 + 0.5;
+        
+        // Biological veiny threshold
+        pattern = smoothstep(0.2, 0.8, pattern);
         
         vec3 finalColor = mix(colorA, colorB, pattern);
         // Add brightness boost
@@ -207,13 +190,15 @@ aimCursor.position.set(0, 0, -65);
 aimCursor.visible = false;
 scene.add(aimCursor);
 
-// Add global interactions to force audio context resume
+// Add global interactions to force audio context init and resume
+const initAudioOnInteract = () => {
+  audio.init();
+  if (audio.ctx && audio.ctx.state === 'suspended') {
+    audio.ctx.resume();
+  }
+};
 ['click', 'keydown', 'touchstart'].forEach(evt => {
-  window.addEventListener(evt, () => {
-    if (audio.ctx && audio.ctx.state === 'suspended') {
-      audio.ctx.resume();
-    }
-  }, { once: true });
+  window.addEventListener(evt, initAudioOnInteract, { once: true });
 });
 
 function spawnExplosion(pos, color = 0xff6600, count = 80) {
