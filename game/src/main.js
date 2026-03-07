@@ -327,9 +327,9 @@ function onCommand(type, data) {
     // Mirrored tracking: user moves hand left -> physical screen left
     const tx = -(data.x - 0.5) * 160; 
     const ty = -(data.y - 0.5) * 80;
-    // Smooth interpolation
-    gestureTarget.x += (tx - gestureTarget.x) * 0.2;
-    gestureTarget.y += (ty - gestureTarget.y) * 0.2;
+    // Faster, snappier cursor tracking (was 0.2, now 0.5)
+    gestureTarget.x += (tx - gestureTarget.x) * 0.5;
+    gestureTarget.y += (ty - gestureTarget.y) * 0.5;
     console.log(`[Aim] target mapped to x:${gestureTarget.x.toFixed(1)} y:${gestureTarget.y.toFixed(1)}`);
   }
 
@@ -433,20 +433,64 @@ const _enemy = new THREE.Vector3();
 function triggerSmartBomb() {
   const centerNode = gestureTarget.clone();
   
-  // Create massive expanding ring visual
-  const ringGeo = new THREE.RingGeometry(0.1, 2, 64);
-  const ringMat = new THREE.MeshBasicMaterial({ 
-    color: 0x00ffff, 
-    side: THREE.DoubleSide, 
-    transparent: true, 
-    opacity: 0.8,
-    blending: THREE.AdditiveBlending 
+  // Create massive expanding fiery shockwave visual using a custom Shader
+  const ringGeo = new THREE.PlaneGeometry(8, 8);
+  const ringMat = new THREE.ShaderMaterial({
+    depthTest: false,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: {
+      time: { value: 0 },
+      colorA: { value: new THREE.Color(0xffaa00) },
+      colorB: { value: new THREE.Color(0xff3300) }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 colorA;
+      uniform vec3 colorB;
+      varying vec2 vUv;
+
+      // Extremely simple 2D pseudo-random
+      float random(vec2 st) { return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123); }
+
+      void main() {
+        vec2 center = vec2(0.5, 0.5);
+        vec2 diff = vUv - center;
+        float dist = length(diff);
+        
+        // Define an expanding ring (a hollow circle that dissipates)
+        // Outer falloff
+        float alpha = smoothstep(0.5, 0.45, dist);
+        // Inner cutout to make it a ring
+        alpha *= smoothstep(0.1, 0.35, dist);
+        
+        // Add turbulent, fiery pattern mapped radially
+        float angle = atan(diff.y, diff.x);
+        float noise = sin(angle * 12.0 + time * 10.0) * 0.15 * dist 
+                    + sin(dist * 20.0 - time * 15.0) * 0.5;
+        
+        alpha *= smoothstep(0.3, 0.6, noise + 0.6);
+        
+        // Emissive heat gradient (orange core fading to hot red edge)
+        vec3 finalColor = mix(colorB, colorA, smoothstep(0.2, 0.5, dist + noise*0.5));
+        
+        gl_FragColor = vec4(finalColor, alpha);
+      }
+    `
   });
   const ringMesh = new THREE.Mesh(ringGeo, ringMat);
   ringMesh.position.copy(centerNode);
   scene.add(ringMesh);
   
-  smartBombs.push({ mesh: ringMesh, scale: 1, maxScale: 80, life: 1.0, maxLife: 1.0 });
+  smartBombs.push({ mesh: ringMesh, mat: ringMat, scale: 1, maxScale: 40, life: 1.0, maxLife: 1.0 });
   
   // Implode audio
   audio.playSFX('explosion');
@@ -466,14 +510,18 @@ function updateSmartBombs(dt) {
   for (let i = smartBombs.length - 1; i >= 0; i--) {
     const b = smartBombs[i];
     b.life -= dt;
-    b.scale += dt * 100; // expand rapidly
+    b.scale += dt * 50; // Expand ring
     b.mesh.scale.set(b.scale, b.scale, b.scale);
-    b.mesh.material.opacity = (b.life / b.maxLife) * 0.8;
+    
+    // Update Shader uniforms
+    b.mat.uniforms.time.value += dt;
+    // Fade out as it expires
+    b.mesh.material.opacity = Math.max(0, b.life / b.maxLife);
     
     if (b.life <= 0) {
        scene.remove(b.mesh);
        b.mesh.geometry.dispose();
-       b.mesh.material.dispose();
+       b.mat.dispose();
        smartBombs.splice(i, 1);
     }
   }
