@@ -247,6 +247,8 @@ let phaseTimer = 0;
 let currentBoidState = STATES.IDLE;
 let autoAttackTimer = 0;
 let homeworldSpawned = false;
+let smartBombCooldown = 0; // Cooldown for the 'gather' smart bomb
+const smartBombs = [];     // Track expanding AOE rings
 
 function startGame() {
   audio.init();
@@ -366,7 +368,18 @@ function onCommand(type, data) {
       break;
     case 'gather':
       setBoidState(STATES.BATTLE);
-      hud.showCommand('GATHER ✊');
+      
+      // Smart Bomb Logic (10s Cooldown)
+      if (smartBombCooldown <= 0 && gameState === 'RUNNING' && !homeworldSpawned) {
+        triggerSmartBomb();
+        smartBombCooldown = 10;
+        hud.showCommand('⚡ SMART BOMB DEPLOYED ⚡');
+      } else if (smartBombCooldown > 0) {
+        hud.showCommand(`GATHER ✊ (Bomb CD: ${Math.ceil(smartBombCooldown)}s)`);
+      } else {
+        hud.showCommand('GATHER ✊');
+      }
+      
       // Reset target to center
       gestureTarget.set(0, 0, -65);
       aimCursor.visible = false;
@@ -417,8 +430,60 @@ renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 const _drone = new THREE.Vector3();
 const _enemy = new THREE.Vector3();
 
+function triggerSmartBomb() {
+  const centerNode = gestureTarget.clone();
+  
+  // Create massive expanding ring visual
+  const ringGeo = new THREE.RingGeometry(0.1, 2, 64);
+  const ringMat = new THREE.MeshBasicMaterial({ 
+    color: 0x00ffff, 
+    side: THREE.DoubleSide, 
+    transparent: true, 
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending 
+  });
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+  ringMesh.position.copy(centerNode);
+  scene.add(ringMesh);
+  
+  smartBombs.push({ mesh: ringMesh, scale: 1, maxScale: 80, life: 1.0, maxLife: 1.0 });
+  
+  // Implode audio
+  audio.playSFX('explosion');
+  
+  // Instantly wipe all standard enemies within heavy range (Distance < 50)
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.mesh.position.distanceTo(centerNode) < 70) {
+      // Trigger individual explosion for cinematic effect
+      spawnExplosion(e.mesh.position.clone(), 0x00ffff, 60);
+      e.hp = -999; // Mark for death in the next updateCombat frame
+    }
+  }
+}
+
+function updateSmartBombs(dt) {
+  for (let i = smartBombs.length - 1; i >= 0; i--) {
+    const b = smartBombs[i];
+    b.life -= dt;
+    b.scale += dt * 100; // expand rapidly
+    b.mesh.scale.set(b.scale, b.scale, b.scale);
+    b.mesh.material.opacity = (b.life / b.maxLife) * 0.8;
+    
+    if (b.life <= 0) {
+       scene.remove(b.mesh);
+       b.mesh.geometry.dispose();
+       b.mesh.material.dispose();
+       smartBombs.splice(i, 1);
+    }
+  }
+}
+
 function updateCombat(dt) {
   if (gameState !== 'RUNNING') return;
+
+  if (smartBombCooldown > 0) smartBombCooldown -= dt;
+  updateSmartBombs(dt);
 
   autoAttackTimer -= dt;
   if (autoAttackTimer < 0 && currentBoidState === STATES.ATTACK) {

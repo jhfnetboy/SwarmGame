@@ -40,6 +40,7 @@ def gesture_process(command_queue: Queue, stop_event: Event):
 
     last_gesture  = None
     last_sent_time = 0.0
+    last_print_time = 0.0 # Track throttling separately so it doesn't break debounce
     frame_interval = 1.0 / TARGET_FPS
     
     # 增加滑动窗口防抖
@@ -96,13 +97,14 @@ def gesture_process(command_queue: Queue, stop_event: Event):
              
         if should_send:
              if gesture == "overload": 
-                 if (now - last_sent_time) > 1.0:
+                 if (now - last_print_time) > 1.0:
                      print(f"[Gesture] 🎯 Confirmed: {gesture} (Throttled Log)", flush=True)
+                     last_print_time = now
              else:
                  print(f"[Gesture] 🎯 Confirmed: {gesture}", flush=True)
+                 last_sent_time = now # ONLY discrete gestures trigger debounce lockout!
                  
              command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
-             last_sent_time = now
              last_gesture = gesture
 
         # 帧率控制
