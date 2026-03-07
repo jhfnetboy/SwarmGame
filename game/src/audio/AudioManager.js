@@ -52,31 +52,48 @@ export class AudioManager {
 
     // Throttle laser sounds
     if (type.startsWith('laser')) {
-      if (t - this.lastLaserTime < 0.06) return;
+      if (t - this.lastLaserTime < 0.05) return;
       this.lastLaserTime = t;
     }
 
-    const play = (freq, endFreq, duration, wavetype, vol = 0.05) => {
+    const dualPlay = (freq1, freq2, endFreq, dur, wave1, wave2, vol) => {
       try {
-        const osc = this.ctx.createOscillator();
+        const o1 = this.ctx.createOscillator();
+        const o2 = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = wavetype;
-        osc.frequency.setValueAtTime(freq, t);
-        if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + duration);
+        o1.type = wave1; o2.type = wave2;
+        o1.frequency.setValueAtTime(freq1, t);
+        o2.frequency.setValueAtTime(freq2, t);
+        if (endFreq) {
+          o1.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+          o2.frequency.exponentialRampToValueAtTime(endFreq * 0.98, t + dur);
+        }
         gain.gain.setValueAtTime(vol, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-        osc.connect(gain); gain.connect(this.sfxGain);
-        osc.start(t); osc.stop(t + duration);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o1.connect(gain); o2.connect(gain); gain.connect(this.sfxGain);
+        o1.start(t); o1.stop(t + dur);
+        o2.start(t); o2.stop(t + dur);
       } catch(e) {}
     };
 
     if (type === 'laser_normal') {
-      play(600 + Math.random()*200, 80, 0.12, 'square', 0.03);
+      dualPlay(800 + Math.random()*200, 810 + Math.random()*200, 100, 0.15, 'square', 'sawtooth', 0.04);
     } else if (type === 'laser_overload') {
-      play(250 + Math.random()*80, 40, 0.25, 'sawtooth', 0.07);
+      dualPlay(300 + Math.random()*100, 150 + Math.random()*50, 40, 0.3, 'sawtooth', 'square', 0.08);
     } else if (type === 'explosion') {
-      // Noise burst
+      // Noise burst with deep kick
       try {
+        // Kick
+        const o = this.ctx.createOscillator();
+        const g1 = this.ctx.createGain();
+        o.frequency.setValueAtTime(150, t);
+        o.frequency.exponentialRampToValueAtTime(20, t + 0.5);
+        g1.gain.setValueAtTime(0.3, t);
+        g1.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+        o.connect(g1); g1.connect(this.sfxGain);
+        o.start(t); o.stop(t + 0.6);
+        
+        // Noise
         const bufSize = this.ctx.sampleRate * 0.5;
         const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
         const data = buf.getChannelData(0);
@@ -85,16 +102,16 @@ export class AudioManager {
         src.buffer = buf;
         const flt = this.ctx.createBiquadFilter();
         flt.type = 'lowpass';
-        flt.frequency.setValueAtTime(800, t);
-        flt.frequency.exponentialRampToValueAtTime(80, t + 0.4);
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.2, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-        src.connect(flt); flt.connect(g); g.connect(this.sfxGain);
+        flt.frequency.setValueAtTime(1200, t);
+        flt.frequency.exponentialRampToValueAtTime(100, t + 0.4);
+        const g2 = this.ctx.createGain();
+        g2.gain.setValueAtTime(0.4, t);
+        g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        src.connect(flt); flt.connect(g2); g2.connect(this.sfxGain);
         src.start(t);
       } catch(e) {}
     } else if (type === 'ui') {
-      play(1400, 1800, 0.08, 'sine', 0.12);
+      dualPlay(1400, 2100, 1800, 0.1, 'sine', 'sine', 0.1);
     }
   }
 
@@ -129,18 +146,22 @@ export class AudioManager {
       const seq = [110, 130, 146, 130];
       this.bgmInterval = setInterval(() => {
         note(seq[i % 4], 0.18, 0.09, 'triangle');
-        if (i % 8 === 0) note(55, 0.35, 0.12, 'square');
+        if (i % 8 === 0) note(55, 0.35, 0.14, 'square');
         i++;
       }, 220);
     } else if (state === 'CLIMAX') {
       let i = 0;
       this.bgmInterval = setInterval(() => {
-        note(110, 0.12, 0.14, 'sawtooth');
-        note(82, 0.18, 0.12, 'square');
+        // High tension sawtooth arps
+        note(110 + (i%2)*20, 0.12, 0.12, 'sawtooth');
+        note(82, 0.18, 0.15, 'square');
+        // Deep sub-bass pulse every beat
+        if (i % 4 === 0) note(41, 0.8, 0.2, 'sine');
         i++;
       }, 140);
     } else if (state === 'GAMEOVER') {
       note(110, 2.0, 0.18, 'sine');
+      note(55, 3.0, 0.2, 'sine'); // Sub drop
       setTimeout(() => note(82, 2.5, 0.15, 'sine'), 200);
     }
   }

@@ -95,8 +95,12 @@ def gesture_process(command_queue: Queue, stop_event: Event):
              last_gesture = None
              
         if should_send:
-             if gesture != "overload": 
+             if gesture == "overload": 
+                 if (now - last_sent_time) > 1.0:
+                     print(f"[Gesture] 🎯 Confirmed: {gesture} (Throttled Log)", flush=True)
+             else:
                  print(f"[Gesture] 🎯 Confirmed: {gesture}", flush=True)
+                 
              command_queue.put({"type": "gesture", "cmd": gesture, "x": gx, "y": gy})
              last_sent_time = now
              last_gesture = gesture

@@ -99,14 +99,67 @@ function spawnWarship() {
 function spawnHomeworld() {
   const group = new THREE.Group();
 
-  // Core: Glowing cybernetic sphere (smooth, less vertices for performance)
-  const coreGeo = new THREE.SphereGeometry(22, 32, 32); // Using Sphere to avoid FPS drop from computing Icosahedron normals
-  const coreMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0x9900ff, // Bright purple neon glow
-    emissiveIntensity: 1.5,
-    roughness: 0.1, 
-    metalness: 0.8,
+  // Core: Glowing organic pulsating sphere via ShaderMaterial
+  const coreGeo = new THREE.SphereGeometry(22, 32, 32);
+  const coreMat = new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: 0 },
+      colorA: { value: new THREE.Color(0x9900ff) }, // Purple base
+      colorB: { value: new THREE.Color(0xff0044) }, // Red/pink highlights
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 colorA;
+      uniform vec3 colorB;
+      varying vec2 vUv;
+      varying vec3 vPos;
+      
+      // Simple 3D noise function
+      float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+      vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+      vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x);}
+      float noise(vec3 p){
+          vec3 a = floor(p);
+          vec3 d = p - a;
+          d = d * d * (3.0 - 2.0 * d);
+          vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
+          vec4 k1 = perm(b.xyxy);
+          vec4 k2 = perm(k1.xyxy + b.zzww);
+          vec4 c = k2 + a.zzzz;
+          vec4 k3 = perm(c);
+          vec4 k4 = perm(c + 1.0);
+          vec4 o1 = fract(k3 * (1.0 / 41.0));
+          vec4 o2 = fract(k4 * (1.0 / 41.0));
+          vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
+          vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
+          return o4.y * d.y + o4.x * (1.0 - d.y);
+      }
+      
+      void main() {
+        // Fast pulsing noise
+        float n = noise(vPos * 0.15 + time * 1.2);
+        // Slow breathing noise
+        float n2 = noise(vPos * 0.05 - time * 0.5);
+        
+        // Biological veiny pattern
+        float pattern = smoothstep(0.4, 0.6, abs(n - n2));
+        
+        vec3 finalColor = mix(colorA, colorB, pattern);
+        // Add brightness boost
+        finalColor += vec3(0.2, 0.0, 0.2) * (sin(time * 3.0) * 0.5 + 0.5);
+        
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `,
   });
   const core = new THREE.Mesh(coreGeo, coreMat);
   group.add(core);
@@ -136,28 +189,32 @@ function spawnHomeworld() {
 // ─── Laser / Explosion FX ────────────────────────────────────────────────────
 const explosions = []; // { points, life, maxLife }
 
-// Create a visual aim cursor for gesture (Robust Red Crosshair - using BoxGeometry for thickness)
+// Create a visual aim cursor for gesture (Robust Dual Ring Crosshair)
 const aimGroup = new THREE.Group();
-const crossMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 
-// Vertical bar (thick)
-const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 1.0), crossMat);
-aimGroup.add(vBar);
+const ringMat1 = new THREE.MeshBasicMaterial({ color: 0xff0033, side: THREE.DoubleSide });
+const ringGeo1 = new THREE.RingGeometry(1.5, 2.2, 32);
+const ring1 = new THREE.Mesh(ringGeo1, ringMat1);
+aimGroup.add(ring1);
 
-// Horizontal bar (thick)
-const hBar = new THREE.Mesh(new THREE.BoxGeometry(8, 0.8, 1.0), crossMat);
-aimGroup.add(hBar);
-
-// Center ring (pulsing color)
-const ringGeo = new THREE.TorusGeometry(1.6, 0.15, 12, 32);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
-const ring = new THREE.Mesh(ringGeo, ringMat);
-aimGroup.add(ring);
+const ringMat2 = new THREE.MeshBasicMaterial({ color: 0xffaadd, side: THREE.DoubleSide });
+const ringGeo2 = new THREE.RingGeometry(2.5, 3.0, 32);
+const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
+aimGroup.add(ring2);
 
 const aimCursor = aimGroup;
 aimCursor.position.set(0, 0, -65);
 aimCursor.visible = false;
 scene.add(aimCursor);
+
+// Add global interactions to force audio context resume
+['click', 'keydown', 'touchstart'].forEach(evt => {
+  window.addEventListener(evt, () => {
+    if (audio.ctx && audio.ctx.state === 'suspended') {
+      audio.ctx.resume();
+    }
+  }, { once: true });
+});
 
 function spawnExplosion(pos, color = 0xff6600, count = 80) {
   const geo = new THREE.BufferGeometry();
@@ -526,7 +583,40 @@ function updateCombat(dt) {
       }
     }
     if (dronesInRange > 0) {
-      // DPS: normal ~400 → 8000hp / 20s, overload ~1200 → 8000hp / 7s
+      // Drones explicitly fire lasers at the mothership in CLIMAX
+      const divisor = currentBoidState === STATES.OVERLOAD ? 15 : 60;
+      const fireStep = Math.max(1, (boids.count / divisor) | 0);
+      let isOverload = currentBoidState === STATES.OVERLOAD;
+      let isAttack = currentBoidState === STATES.ATTACK;
+      let canFire = isOverload || isAttack || currentBoidState === STATES.CLIMAX;
+      
+      if (canFire) {
+         for (let k = 0; k < boids.count; k += fireStep) {
+            if (Math.random() > (isOverload ? 0.9 : 0.4)) continue;
+            const k3 = k * 3;
+            _drone.set(boids.positions[k3], boids.positions[k3+1], boids.positions[k3+2]);
+            
+            // Only fire if drone is somewhat near
+            if (_drone.distanceTo(homeworldMesh.position) < 80) {
+               // Calculate direction specifically toward the Mothership core
+               let shootDir = new THREE.Vector3().copy(homeworldMesh.position).sub(_drone).normalize();
+               
+               // In overload, add some scatter specifically around the mothership
+               if (isOverload) {
+                   const scatter = new THREE.Vector3((Math.random()-0.5)*15, (Math.random()-0.5)*15, (Math.random()-0.5)*15);
+                   const targetPoint = homeworldMesh.position.clone().add(scatter);
+                   shootDir.copy(targetPoint).sub(_drone).normalize();
+                   lasers.fire(_drone, shootDir, 250, true);
+                   audio.playSFX('laser_overload');
+               } else {
+                   lasers.fire(_drone, shootDir, 160, false);
+                   audio.playSFX('laser_normal');
+               }
+            }
+         }
+      }
+      
+      // DPS: normal ~400 → 18000hp / 45s, overload ~1200 → 18000hp / 15s
       const fraction = Math.min(dronesInRange / 100, 1.0);
       const dps = currentBoidState === STATES.OVERLOAD ? 1200 : 400;
       homeworldHp -= dps * fraction * dt;
